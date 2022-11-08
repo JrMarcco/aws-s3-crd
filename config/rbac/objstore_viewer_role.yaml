@@ -1,0 +1,27 @@
+# permissions for end users to view objstores.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: objstore-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: aws-s3-crd
+    app.kubernetes.io/part-of: aws-s3-crd
+    app.kubernetes.io/managed-by: kustomize
+  name: objstore-viewer-role
+rules:
+- apiGroups:
+  - cninf.jrmarcco.io
+  resources:
+  - objstores
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cninf.jrmarcco.io
+  resources:
+  - objstores/status
+  verbs:
+  - get

@@ -1,0 +1,16 @@
+domain: jrmarcco.io
+layout:
+- go.kubebuilder.io/v3
+projectName: aws-s3-crd
+repo: aws-s3-crd
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: jrmarcco.io
+  group: cninf
+  kind: ObjStore
+  path: aws-s3-crd/api/v1alpha1
+  version: v1alpha1
+version: "3"
