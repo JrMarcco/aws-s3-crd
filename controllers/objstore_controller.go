@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,7 +33,10 @@ import (
 	cninfv1alpha1 "aws-s3-crd/api/v1alpha1"
 )
 
-const configMapName = "%s-cm"
+const (
+	configMapName = "%s-cm"
+	finalizer     = "objstores.cninf.jrmarcco.io/finalizer"
+)
 
 // ObjStoreReconciler reconciles a ObjStore object
 type ObjStoreReconciler struct {
@@ -56,18 +60,44 @@ type ObjStoreReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *ObjStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	_ = log.FromContext(ctx)
 
 	inst := &cninfv1alpha1.ObjStore{}
 	if err := r.Get(ctx, req.NamespacedName, inst); err != nil {
-		log.Error(err, "unable to get resource")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if inst.Status.State == "" {
-		inst.Status.State = cninfv1alpha1.PendingState
-		// update status
-		_ = r.Status().Update(ctx, inst)
+	if inst.ObjectMeta.DeletionTimestamp.IsZero() {
+		if inst.Status.State == "" {
+			inst.Status.State = cninfv1alpha1.PendingState
+			// update status
+			_ = r.Status().Update(ctx, inst)
+		}
+		controllerutil.AddFinalizer(inst, finalizer)
+		if err := r.Update(ctx, inst); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if inst.Status.State == cninfv1alpha1.PendingState {
+			// create resources
+			if err := r.CreateResources(ctx, inst); err != nil {
+				inst.Status.State = cninfv1alpha1.ErrorState
+				_ = r.Status().Update(ctx, inst)
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// delete resources
+		if err := r.DeleteResources(ctx, inst); err != nil {
+			inst.Status.State = cninfv1alpha1.ErrorState
+			_ = r.Status().Update(ctx, inst)
+			return ctrl.Result{}, err
+		}
+		// release finalizer
+		controllerutil.RemoveFinalizer(inst, finalizer)
+		if err := r.Update(ctx, inst); err != nil {
+			return ctrl.Result{}, nil
+		}
 	}
 
 	return ctrl.Result{}, nil
